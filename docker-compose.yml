@@ -32,11 +32,13 @@ services:
     ports:
       - "3000:3000"
     healthcheck:
-      # Node is always present in the image; curl and wget may not be. This
-      # treats any status below 400 (the home page returns 200) as healthy.
-      # If this ever misbehaves, delete the healthcheck block and rely on the
-      # host-side readiness wait already in ci.yml.
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
+      # The v20 image is distroless: node lives at /nodejs/bin/node (not on PATH)
+      # and there is no /bin/sh, so a CMD-SHELL probe -- which Docker runs via
+      # `/bin/sh -c` -- can never start, leaving the container forever "unhealthy"
+      # and `docker compose up --wait` exiting 1. Use exec form with the absolute
+      # node path: no shell, no PATH lookup. Any status below 400 (the home page
+      # returns 200) is healthy.
+      test: ["CMD", "/nodejs/bin/node", "-e", "require('http').get('http://localhost:3000',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 20
