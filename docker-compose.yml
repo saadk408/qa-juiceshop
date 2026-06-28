@@ -1,9 +1,43 @@
-# docker-compose.yml
-# TODO: define services for local test runs (e.g. the SUT and/or a database).
-# Kept minimal until the stack is chosen.
+# Place this file at the repo root: docker-compose.yml
+#
+# Runs the OWASP Juice Shop application under test.
+#
+# The image tag is pinned for reproducibility, which matters because the suite
+# asserts on this exact build of the app. Bump the tag deliberately when you
+# want to test a newer release, then re-run the suite to catch any drift.
+#
+# Database access for the tests/db layer:
+#   Juice Shop bundles SQLite and recreates it from scratch on every startup.
+#   We deliberately do NOT bind-mount the data directory, because that directory
+#   also holds seed files the app needs at boot, and mounting over it breaks
+#   startup. Instead, the db fixture copies the live file out of the container
+#   and reads the copy, for example:
+#
+#     docker compose cp juiceshop:/juice-shop/data/juiceshop.sqlite ./.tmp/db.sqlite
+#
+#   That avoids both the file-shadowing problem and SQLite file-lock issues.
+#
+#   Confirm the in-container path against your running v20 container before
+#   wiring the fixture. The expected path is /juice-shop/data/juiceshop.sqlite.
+#   To verify, copy the data folder out and inspect it:
+#
+#     docker compose up -d
+#     docker compose cp juiceshop:/juice-shop/data ./_data-inspect
+#     ls ./_data-inspect        # find the *.sqlite filename, then delete the folder
 
 services:
   juiceshop:
-    image: bkimminich/juice-shop
+    image: bkimminich/juice-shop:v20.0.0
+    container_name: juiceshop          # the db fixture and `docker compose cp` target this
     ports:
       - "3000:3000"
+    healthcheck:
+      # Node is always present in the image; curl and wget may not be. This
+      # treats any status below 400 (the home page returns 200) as healthy.
+      # If this ever misbehaves, delete the healthcheck block and rely on the
+      # host-side readiness wait already in ci.yml.
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
