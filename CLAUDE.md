@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A QA automation suite that tests **OWASP Juice Shop** (a deliberately insecure e-commerce app, run as the system under test) across four layers — UI, API, database, and security regression — using Playwright + TypeScript on Node 22+, with an OWASP ZAP DAST scan in CI. This repo holds the *tests*; the app under test runs as a pinned Docker container.
+A QA automation suite that tests **OWASP Juice Shop** (a deliberately insecure e-commerce app, run as the system under test) across four layers — UI, API, database, and security regression — using Playwright + TypeScript on Node 24+, with an OWASP ZAP DAST scan in CI. This repo holds the *tests*; the app under test runs as a pinned Docker container.
 
 Two docs are authoritative — read them before substantive work:
 - **`docs/test-strategy.md`** — scope, the risk matrix, goals/non-goals, and the reasoning behind every decision below.
@@ -16,13 +16,13 @@ Two docs are authoritative — read them before substantive work:
 
 - `src/{pages,fixtures,api,schemas}` and `tests/{api,db}` contain only `.gitkeep` — no Page Objects, fixtures, API clients, or Zod schemas yet.
 - `tests/security/` is **not committed at all**, yet `playwright.config.ts` declares it as a project `testDir` and `ci.yml` runs it. Every case is fully specified in `docs/security-regression.md`.
-- `package.json` `scripts` is **empty** and there is **no `tsconfig.json` and no eslint config**. The `lint` + `test:*` scripts in the Commands section are the agreed contract, to be implemented next phase; until then run Playwright via the `npx` equivalents. CI's `lint` job (`npm run lint`) **fails today** — there is no `lint` script and no eslint/config yet.
+- `package.json` `scripts` is **empty** and there is **no `tsconfig.json` and no eslint config**. The `lint` + `test:*` scripts in the Commands section are the agreed contract, to be implemented next phase; until then run Playwright via the `npx` equivalents. CI's `lint` job (`npm run lint`) **fails today** — there is no `lint` script and no eslint/config yet. When those scripts land, also add `"engines": { "node": ">=24" }` to `package.json` (deferred now to avoid a half-configured manifest).
 - `postman/collection.json` exists and the docs mention Newman, but **CI has no Newman step** — the collection isn't wired into any pipeline.
 - `tests/ui/smoke.spec.ts` hardcodes `http://localhost:3000`; new tests should use **relative paths** so `BASE_URL` applies.
 
 ## Commands
 
-**Prereqs:** Docker and Node 22+. Always start the app first:
+**Prereqs:** Docker and Node 24+. Always start the app first:
 
 ```bash
 docker compose up -d --wait                    # Juice Shop on :3000 (pinned bkimminich/juice-shop:v20.0.0), waits for healthcheck
@@ -69,7 +69,7 @@ CI does **not** use the `test:*` scripts: it runs path-scoped `npx playwright te
 docker compose cp juiceshop:/juice-shop/data/juiceshop.sqlite ./.tmp/db.sqlite
 ```
 
-This is why there is no DB connection string. Two caveats for the next-phase fixture: **delete the temp copy in teardown** — `.gitignore` ignores `/test-results/` but **not** `.tmp/`, so `./.tmp/db.sqlite` is currently committable (write it under an already-ignored path or add `.tmp/` to `.gitignore`); and **`node:sqlite` is experimental and Node-version-gated** — on the pinned Node it may need `--experimental-sqlite`, so verify it loads or fall back to **`better-sqlite3`** (the fallback named in `test-strategy.md` §8).
+This is why there is no DB connection string. Two caveats for the next-phase fixture: **delete the temp copy in teardown** — `.gitignore` ignores `/test-results/` but **not** `.tmp/`, so `./.tmp/db.sqlite` is currently committable (write it under an already-ignored path or add `.tmp/` to `.gitignore`); and **`node:sqlite` is experimental but unflagged on Node 24** — it loads without `--experimental-sqlite`, emitting only an experimental warning; keep **`better-sqlite3`** as a fallback (named in `test-strategy.md` §8) for the unlikely load failure.
 
 **Security tests are paired (A/B).** Each case is written twice: **(A)** a confirmation test asserting the vulnerability is present (passes against stock Juice Shop; informational), and **(B)** a target-state spec asserting secure behavior, marked `test.fail()` — an expected failure today that flips green the day the issue is fixed. Per-case code is in `docs/security-regression.md`. Exclude the challenges Juice Shop disables in a container (XXE, SSTI, insecure deserialization, NoSQL DoS).
 

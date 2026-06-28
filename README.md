@@ -93,7 +93,7 @@ Real defects found while testing are written up in **[docs/bugs/](docs/bugs/)** 
 
 Gets you from clone to a passing run in a few minutes.
 
-**Prerequisites:** Docker, Node.js 22 or newer, and Git.
+**Prerequisites:** Docker, Node.js 24 or newer, and Git.
 
 ```bash
 # 1. Clone

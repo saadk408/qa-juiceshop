@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NODE_VERSION: "22"            # Juice Shop v20 needs a current Node; 22 is LTS
+  NODE_VERSION: "24"            # Juice Shop v20 needs a current Node; 24 is the current LTS
   BASE_URL: "http://localhost:3000"
 
 jobs:
