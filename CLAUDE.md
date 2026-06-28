@@ -14,8 +14,8 @@ Two docs are authoritative — read them before substantive work:
 
 **This repo is mostly scaffold.** The README and `docs/` describe a complete suite, but only the structure and one smoke test (`tests/ui/smoke.spec.ts`) are committed. The docs are the spec for *what* to build — do not assume the following already exist:
 
-- `src/{pages,api,schemas}` and `tests/{api,db}` contain only `.gitkeep` — no Page Objects, API clients, or Zod schemas yet. **`src/fixtures/` is implemented** (`auth.ts`, `db.ts`, `index.ts`).
-- `tests/security/` is **not committed at all**, yet `playwright.config.ts` declares it as a project `testDir` and `ci.yml` runs it. Every case is fully specified in `docs/security-regression.md`.
+- **A login vertical slice is on `main` — use it as the pattern for new work:** `src/pages/{BasePage,LoginPage}.ts` (first POM), `src/schemas/login.ts` (Zod, validated with `.parse()`), and one spec per layer (`tests/{ui,api,db}/*.spec.ts` + `tests/security/sqli-login.spec.ts`). `src/fixtures/` is implemented (`auth.ts`, `db.ts`, `index.ts`).
+- Still scaffold (`.gitkeep`/TODO): `src/api/` (typed clients) and the other four cases in `docs/security-regression.md` (basket IDOR, DOM XSS, error leakage, chatbot prompt injection).
 - **Now in place** (tooling phase): `package.json` has the `lint`/`typecheck`/`validate` + `test`/`test:*` scripts, `engines.node >=24`, and the eslint/typescript dev deps; the repo root has `eslint.config.mjs` (flat config — typescript-eslint + eslint-plugin-playwright) and a minimal `tsconfig.json`. CI's gating job runs `npm run validate` (eslint + `tsc --noEmit`), green on the current tree.
 - `postman/collection.json` exists and the docs mention Newman, but **CI has no Newman step** — the collection isn't wired into any pipeline.
 - `tests/ui/smoke.spec.ts` hardcodes `http://localhost:3000`; new tests should use **relative paths** so `BASE_URL` applies.
@@ -71,7 +71,7 @@ CI does **not** use the `test:*` scripts: it runs path-scoped `npx playwright te
 
 - **Load `node:sqlite` via `process.getBuiltinModule('node:sqlite')` (+ `import type`), never a static `import`/`require`** — Playwright's TS loader returns a null source for the experimental builtin and crashes. `better-sqlite3` stays the documented fallback (`test-strategy.md` §8) but is **not yet wired in**.
 
-**Security tests are paired (A/B).** Each case is written twice: **(A)** a confirmation test asserting the vulnerability is present (passes against stock Juice Shop; informational), and **(B)** a target-state spec asserting secure behavior, marked `test.fail()` — an expected failure today that flips green the day the issue is fixed. Per-case code is in `docs/security-regression.md`. Exclude the challenges Juice Shop disables in a container (XXE, SSTI, insecure deserialization, NoSQL DoS).
+**Security tests are paired (A/B).** Each case is written twice: **(A)** a confirmation test asserting the vulnerability is present (passes against stock Juice Shop; informational), and **(B)** a target-state spec asserting secure behavior, marked `test.fail()` — it runs and must fail today, so it reports as **passed** (an expected failure); it turns **red as an unexpected pass** the day the issue is fixed (the signal to remove the marker). Per-case code is in `docs/security-regression.md`. Exclude the challenges Juice Shop disables in a container (XXE, SSTI, insecure deserialization, NoSQL DoS).
 
 ## Fixture contract (`src/fixtures/auth.ts`)
 
@@ -102,10 +102,16 @@ Parallel jobs, each on its own runner spinning its own fresh container (`docker 
 
 Lint, type errors, and functional failures gate the build. Vulnerability-confirmation tests and ZAP alerts never gate — the app is vulnerable by design.
 
+**Gotchas:** CI triggers only on `push`/`pull_request` to `main`/`master`, so a PR based on another branch runs no Actions jobs until it targets `main`. `publish-report` deploys to the `github-pages` environment, which is **restricted to `main`** — it fails fast on every PR/non-`main` ref **by design** (green only on push-to-`main`, not a real failure). Pin actions to node24 majors (`upload-artifact@v7`, `download-artifact@v8`, `deploy-pages@v5`, etc.).
+
 ## Conventions
 
 - **AI-in-the-loop:** validate every AI-generated case against the app's real behavior before committing, and log any miss (wrong locator, invented endpoint, assertion that doesn't match reality) as a row in `docs/ai-validation-log.md`. That log is a deliberate portfolio artifact.
-- **Confirm instance-specific values against the running v20 app** before relying on them: chatbot selectors / response endpoint / coupon format remain TODO. Confirmed: `securityQuestion` id `1`, SQLite path `/juice-shop/data/juiceshop.sqlite`, rollback-journal mode.
+- **Confirm instance-specific values against the running v20 app** before relying on them. Confirmed:
+  - `securityQuestion` id `1`; SQLite path `/juice-shop/data/juiceshop.sqlite`, rollback-journal mode; DB table **`Users`**, column **`email`** (BINARY — exact `=`).
+  - Login page (`/#/login`) locators (used by `LoginPage`): inputs `getByRole('textbox', { name: /email|password/i })` — **not** `getByLabel(/password/i)`, which also matches the show-password toggle (strict-mode); submit `getByRole('button', { name: 'Login', exact: true })` — non-exact `Login` also matches "Login with Google"; account menu `name: /show\/hide account menu/i`; logged-in email in the `Go to user profile` menuitem.
+  - SQLi login bypass: `' OR 1=1;--` in the email field of `POST /rest/user/login` → 200 with `authentication.token` (seeded admin).
+  - Still TODO: chatbot selectors / response endpoint / coupon format.
 - **No fixed sleeps** — rely on Playwright auto-waiting and web-first assertions, waiting on real signals (a response, an attached node, the transcript growing) so cases stay deterministic.
 - **ESLint:** `tseslint.configs.recommended` (not type-checked); `eslint-plugin-playwright` covers `tests/**` only. In `src/`: dep-less Playwright fixtures need `// eslint-disable-next-line no-empty-pattern` for `({}, use)`; a `throw` inside a `catch` needs `{ cause }` (`preserve-caught-error`); no `any` (`no-explicit-any`).
 - **Bug reports** go in `docs/bugs/` using `docs/bugs/BUG-template.md`.
