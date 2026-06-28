@@ -1,0 +1,9 @@
+# docker-compose.yml
+# TODO: define services for local test runs (e.g. the SUT and/or a database).
+# Kept minimal until the stack is chosen.
+
+services:
+  juiceshop:
+    image: bkimminich/juice-shop
+    ports:
+      - "3000:3000"

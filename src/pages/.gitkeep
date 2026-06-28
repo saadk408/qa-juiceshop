@@ -1,0 +1,2 @@
+# Page Object Model
+# TODO: one file per page/screen. Encapsulate selectors + actions, no assertions.

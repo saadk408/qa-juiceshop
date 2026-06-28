@@ -1,0 +1,19 @@
+{
+  "name": "qa-juiceshop",
+  "version": "1.0.0",
+  "description": "<!-- TODO: replace [your-username]/[repo] with your real path once the repo exists --> [![CI](https://github.com/[your-username]/[repo]/actions/workflows/ci.yml/badge.svg)](https://github.com/[your-username]/[repo]/actions/workflows/ci.yml) [![Test Report](https://img.shields.io/badge/test%20report-live-blue)](https://[your-username].github.io/[repo]/)",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.0.1"
+  }
+}

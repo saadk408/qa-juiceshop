@@ -1,0 +1,2 @@
+# Typed API clients
+# TODO: thin typed wrappers around endpoints; return parsed, schema-validated data.
