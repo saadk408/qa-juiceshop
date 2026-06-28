@@ -1,2 +1,0 @@
-# Response schemas (Zod) for contract checks
-# TODO: one schema per response shape; reuse in API clients and contract tests.
