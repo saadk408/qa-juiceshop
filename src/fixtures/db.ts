@@ -64,23 +64,27 @@ class JuiceShopDbImpl implements JuiceShopDbHandle {
       }
 
       const database = new SqliteDatabase(dest, { readOnly: true });
+      // Track the handle now, before the checks below run: if the PRAGMA read throws,
+      // the outer catch's dispose() must see it to close it -- otherwise the open
+      // native handle leaks onto the just-deleted temp file. dispose()'s isOpen guard
+      // keeps the WAL-branch throw below from double-closing (close() throws if closed).
+      this.#database = database;
 
       // Juice Shop's Sequelize SQLite runs in rollback-journal mode, so the main file
       // is authoritative and a read-only copy is complete. If a future version ever
       // switches to WAL, a main-file-only read-only copy would miss un-checkpointed
-      // writes -- fail loudly rather than return stale data.
-      const mode = database.prepare('PRAGMA journal_mode').get() as {
+      // writes -- fail loudly rather than return stale data. `.get()` returns undefined
+      // for an empty result set, so default to {} before reading journal_mode.
+      const mode = (database.prepare('PRAGMA journal_mode').get() ?? {}) as {
         journal_mode?: string;
       };
       if (mode.journal_mode?.toLowerCase() === 'wal') {
-        database.close();
         throw new Error(
           'Copied database is in WAL mode; a read-only copy of the main file is ' +
             'incomplete. Open the disposable copy read-write, or also copy -wal/-shm.',
         );
       }
 
-      this.#database = database;
       return database;
     } catch (err) {
       // Setup failed before we handed anything back; clean up the temp dir.
