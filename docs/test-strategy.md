@@ -91,7 +91,7 @@ This section is specific to Juice Shop and is where most of the real judgment li
 
 **Container as the safety boundary.** I run only against my own local or CI container, never a shared or remote instance. Running in a container also disables the dangerous challenges automatically, which keeps both the environment and my security scope safe and deterministic.
 
-**Database access, copied not connected.** Juice Shop bundles SQLite and recreates it on every start. Rather than bind-mounting its data directory (which would shadow seed files the app needs at boot), the database layer copies the live SQLite file out of the container with `docker compose cp` and reads the copy. This keeps the app intact and avoids file-lock issues, and it is why there is no database connection string to configure.
+**Database access, copied not connected.** Juice Shop bundles SQLite and recreates it on every start. Rather than bind-mounting its data directory (which would shadow seed files the app needs at boot), the database layer copies the live SQLite file out of the container with `docker compose cp` and reads the copy with Node 24's built-in `node:sqlite` (no `--experimental-sqlite` flag needed; `better-sqlite3` is the fallback). This keeps the app intact and avoids file-lock issues, and it is why there is no database connection string to configure.
 
 **Secrets and config.** There are no real secrets. Configuration (chiefly the base URL) is supplied via environment variables, with a committed `.env.example` documenting every value. No seeded-account credentials are stored, because tests register their own users, and no database connection string is needed for the reason above.
 
@@ -144,7 +144,7 @@ The curated set (chosen for being representative of a Top 10 class, safe in a co
 | Playwright + TypeScript | UI and API automation | Fast, reliable auto-waiting, built-in tracing and parallelism, strong current demand. |
 | Postman / Newman | Optional API collection (planned) | Recognizable and recruiter-friendly. The API layer currently runs on Playwright's request API, so this is a candidate add-on, not yet wired into CI. |
 | Zod | Response schema validation | Enforces API contracts; catches silent drift the status code alone misses. |
-| node:sqlite (built-in), better-sqlite3 as fallback | Database assertions | Reads a copied SQLite file to enable the three-way consistency check. |
+| node:sqlite (built into Node 24, no `--experimental-sqlite` flag), better-sqlite3 as fallback | Database assertions | Reads a copied SQLite file to enable the three-way consistency check. |
 | OWASP ZAP | DAST baseline | Industry-standard automated scanner; demonstrates security tooling in a pipeline. |
 | Docker Compose | Run the app under test | Reproducible, disposable, and the safe environment for security work. |
 | GitHub Actions | CI | Runs the suite on every change and publishes results. |
