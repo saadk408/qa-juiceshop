@@ -16,7 +16,7 @@ Two docs are authoritative — read them before substantive work:
 
 - `src/{pages,fixtures,api,schemas}` and `tests/{api,db}` contain only `.gitkeep` — no Page Objects, fixtures, API clients, or Zod schemas yet.
 - `tests/security/` is **not committed at all**, yet `playwright.config.ts` declares it as a project `testDir` and `ci.yml` runs it. Every case is fully specified in `docs/security-regression.md`.
-- `package.json` `scripts` is **empty** and there is **no `tsconfig.json` and no eslint config**. The `lint` + `test:*` scripts in the Commands section are the agreed contract, to be implemented next phase; until then run Playwright via the `npx` equivalents. CI's `lint` job (`npm run lint`) **fails today** — there is no `lint` script and no eslint/config yet. When those scripts land, also add `"engines": { "node": ">=24" }` to `package.json` (deferred now to avoid a half-configured manifest).
+- **Now in place** (tooling phase): `package.json` has the `lint`/`typecheck`/`validate` + `test`/`test:*` scripts, `engines.node >=24`, and the eslint/typescript dev deps; the repo root has `eslint.config.mjs` (flat config — typescript-eslint + eslint-plugin-playwright) and a minimal `tsconfig.json`. CI's gating job runs `npm run validate` (eslint + `tsc --noEmit`), green on the current tree.
 - `postman/collection.json` exists and the docs mention Newman, but **CI has no Newman step** — the collection isn't wired into any pipeline.
 - `tests/ui/smoke.spec.ts` hardcodes `http://localhost:3000`; new tests should use **relative paths** so `BASE_URL` applies.
 
@@ -30,7 +30,7 @@ npm ci && npx playwright install --with-deps   # install deps + browsers
 docker compose down                            # stop the app when done
 ```
 
-**Run today** — the npm scripts below are *not implemented yet*, so run Playwright via `npx` directly:
+**Run** — the npm scripts now exist (see the contract below); these `npx` forms are their underlying equivalents:
 
 ```bash
 npx playwright test                            # all projects
@@ -40,10 +40,12 @@ npx playwright test --grep "home page"         # one test by title
 npx playwright show-report                     # open the HTML report
 ```
 
-**Command contract** — to be implemented next phase as `package.json` scripts; each maps to the `npx` form above:
+**Command contract** — implemented as `package.json` scripts:
 
 ```bash
-npm run lint            # → eslint  (eslint + config not installed yet, so this fails today)
+npm run lint            # → eslint .
+npm run typecheck       # → tsc --noEmit
+npm run validate        # → npm run lint && npm run typecheck   (CI's gating check)
 npm test                # → npx playwright test                 (all four projects)
 npm run test:ui         # → npx playwright test --project=ui
 npm run test:api        # → npx playwright test --project=api
@@ -53,7 +55,7 @@ npm run test:security   # → npx playwright test --project=security
 
 `BASE_URL` (default `http://localhost:3000`) is the only config the suite needs; `.env.example` documents it. There is deliberately no DB connection string and no stored credentials (see Fixture contract).
 
-CI does **not** use the `test:*` scripts: it runs path-scoped `npx playwright test tests/ui tests/api tests/db` (functional) and `tests/security` (security) as separate jobs, plus `npm run lint`. So `npm test` (all four projects in one run) intentionally differs from CI's split.
+CI does **not** use the `test:*` scripts: it runs path-scoped `npx playwright test tests/ui tests/api tests/db` (functional) and `tests/security` (security) as separate jobs, plus `npm run validate` (lint + typecheck). So `npm test` (all four projects in one run) intentionally differs from CI's split.
 
 ## Architecture
 
@@ -94,13 +96,13 @@ The `securityQuestion` id sent to `POST /api/Users` is instance-specific; confir
 
 Parallel jobs, each on its own runner spinning its own fresh container (`docker compose up -d --wait`, backed by the healthcheck in `docker-compose.yml`); tests run serially *within* each job:
 
-- `lint` — **gating** (fails until a `lint` script + eslint exist).
+- `lint + typecheck` — **gating**: runs `npm run validate` (eslint + `tsc --noEmit`).
 - `functional-tests` — **gating**: `ui` + `api` + `db`.
 - `security-tests` — informational (`continue-on-error`).
 - `zap-baseline` — informational DAST; alert allowlist in `.zap/rules.tsv`.
 - `publish-report` — merges each job's `blob` report into one HTML report deployed to GitHub Pages; runs even on failure.
 
-Only functional failures gate the build. Vulnerability-confirmation tests and ZAP alerts never gate — the app is vulnerable by design.
+Lint, type errors, and functional failures gate the build. Vulnerability-confirmation tests and ZAP alerts never gate — the app is vulnerable by design.
 
 ## Conventions
 

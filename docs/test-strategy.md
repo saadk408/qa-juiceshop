@@ -154,9 +154,9 @@ The curated set (chosen for being representative of a Top 10 class, safe in a co
 
 ## 9. CI and reporting
 
-On every push and pull request, four jobs run in parallel, each on its own fresh container: lint, the functional suite, the security regression, and the ZAP baseline scan. Within the functional and security jobs, tests run serially (workers set to 1) to respect the single-user design. A final job merges the Playwright blob reports into one HTML report and publishes it to GitHub Pages, with traces and screenshots on failure; the ZAP report is attached to the run.
+On every push and pull request, four jobs run in parallel, each on its own fresh container: lint + typecheck, the functional suite, the security regression, and the ZAP baseline scan. Within the functional and security jobs, tests run serially (workers set to 1) to respect the single-user design. A final job merges the Playwright blob reports into one HTML report and publishes it to GitHub Pages, with traces and screenshots on failure; the ZAP report is attached to the run.
 
-**Build gating.** Lint and functional-test failures fail the build. The security regression and the ZAP baseline are informational and never gate: the confirmation tests pass *because* the app is vulnerable, and ZAP runs against a deliberately vulnerable target, so both report rather than block.
+**Build gating.** Lint, type errors, and functional-test failures fail the build. The security regression and the ZAP baseline are informational and never gate: the confirmation tests pass *because* the app is vulnerable, and ZAP runs against a deliberately vulnerable target, so both report rather than block.
 
 **Flaky test policy.** A test that fails intermittently is quarantined and tracked, not retried into a false green. Knowing a real failure from a flaky one is a core skill, so I treat flakiness as a defect in the test, not noise to suppress.
 
