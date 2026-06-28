@@ -70,8 +70,8 @@ Alongside the automated suite, I run **structured exploratory sessions** using c
 | Layer | Tooling | What it covers |
 |-------|---------|----------------|
 | UI end-to-end | Playwright + Page Object Model | Register and login, product browse and search, basket, checkout, review submission. Happy paths plus key negative and edge cases. |
-| API | Playwright request API + Newman (Postman) | Same operations at the service level: status codes, error handling, auth tokens, and response contract validation against Zod schemas. |
-| Database | SQL via a Node client | Persistence checks after UI or API actions, plus the three-way consistency check below. |
+| API | Playwright request API | Same operations at the service level: status codes, error handling, auth tokens, and response contract validation against Zod schemas. (A Postman/Newman collection is a planned add-on, not yet wired into CI.) |
+| Database | node:sqlite over a copied DB file | Persistence checks after UI or API actions, plus the three-way consistency check below. |
 | Security regression | Playwright | The curated vulnerability set in Section 8. |
 | DAST | OWASP ZAP baseline | Automated passive and baseline active scan of the running app in CI. |
 
@@ -85,13 +85,15 @@ This section is specific to Juice Shop and is where most of the real judgment li
 
 **Self-healing reseed, treated as a determinism gift.** Because every server start gives a clean, known database, I launch a fresh container per CI run. That means every run starts from identical, documented seed data, which is exactly what you want for reproducible tests. The constraint this imposes: no test may assume state survives a restart, and any state a test needs must be created within the test or read from documented seed data.
 
-**Known seed data versus created data.** For read paths I rely on documented seed entities (known products, the seeded admin account). For write paths I create my own data through the API so each test owns its data and stays independent of the others. This keeps tests order-independent and parallel-safe.
+**Known seed data versus created data.** For read paths I rely on documented seed records I read but never authenticate as (known products, and the low-numbered seeded baskets the access-control case targets). For write paths I create my own data through the API, registering a fresh user per test so each test owns its data and stays independent of the others. This keeps tests order-independent.
 
-**Single-user restriction, handled explicitly.** Because one instance is meant for one user, uncontrolled parallelism against a single instance corrupts shared state. I resolve the speed-versus-isolation tradeoff by defaulting to a fresh container per CI run with modest parallelism, and isolating any test that touches global state (such as the score board). The tradeoff is documented rather than hidden, because the reasoning is the point.
+**Single-user restriction, handled explicitly.** Because one instance is meant for one user, uncontrolled parallelism against a single instance corrupts shared state. I resolve the speed-versus-isolation tradeoff by running serially against a single instance (Playwright workers set to 1) and giving each CI job its own fresh container. When more speed is needed, it comes from running separate containers (one per shard), not from more workers against one instance. The tradeoff is documented rather than hidden, because the reasoning is the point.
 
 **Container as the safety boundary.** I run only against my own local or CI container, never a shared or remote instance. Running in a container also disables the dangerous challenges automatically, which keeps both the environment and my security scope safe and deterministic.
 
-**Secrets and config.** There are no real secrets. Configuration (base URL, credentials for the seeded accounts, database connection) is supplied via environment variables, with a committed `.env.example` documenting every value.
+**Database access, copied not connected.** Juice Shop bundles SQLite and recreates it on every start. Rather than bind-mounting its data directory (which would shadow seed files the app needs at boot), the database layer copies the live SQLite file out of the container with `docker compose cp` and reads the copy. This keeps the app intact and avoids file-lock issues, and it is why there is no database connection string to configure.
+
+**Secrets and config.** There are no real secrets. Configuration (chiefly the base URL) is supplied via environment variables, with a committed `.env.example` documenting every value. No seeded-account credentials are stored, because tests register their own users, and no database connection string is needed for the reason above.
 
 ---
 
@@ -128,11 +130,10 @@ The curated set (chosen for being representative of a Top 10 class, safe in a co
 | Vulnerability | OWASP class | Why chosen | What the test asserts |
 |---------------|-------------|------------|------------------------|
 | SQL injection login bypass | A03 Injection | The canonical injection case; deterministic and safe | (A) An injected credential authenticates as admin. (B) Login rejects the injection and grants no session. |
-| Broken access control: admin area and cross-user basket | A01 Broken Access Control | High business impact, easy to reason about | (A) A non-admin reaches admin-only data and one user reads another's basket via the API. (B) Both return 403 or redirect. |
-| Cross-site scripting in search or feedback | A03 Injection (XSS) | Representative input-handling flaw, safe in a container | (A) A payload executes or is stored unescaped. (B) The payload is encoded and never executes. |
-| Sensitive data exposure via error leakage | A05 / A02 | Shows understanding of information disclosure | (A) An error response leaks stack traces or SQL detail. (B) Errors return a safe, generic message. |
-| Broken authentication (weak credential or token handling) | A07 | Auth is the top-priority risk area | (A) A known weak path succeeds. (B) The secure control rejects it. |
-| Chatbot prompt injection (optional, current) | LLM-specific | Differentiated, ties to AI-aware QA | (A) The chatbot is manipulated past its intended behavior. (B) It refuses or sanitizes the injected instruction. |
+| Broken access control: basket IDOR | A01 Broken Access Control | High business impact, easy to reason about | (A) A freshly registered user reads a basket they do not own via the API. (B) The request returns 403 or 401. The client-side-only admin route is covered as an exploratory charter, not an automated case. |
+| Cross-site scripting via search (DOM XSS) | A03 Injection (XSS) | Representative input-handling flaw, safe in a container | (A) A payload renders unescaped in the DOM. (B) The payload is rendered as inert text. |
+| Sensitive data exposure via error leakage | A05 Security Misconfiguration | Shows understanding of information disclosure | (A) An error response leaks SQL or engine detail. (B) Errors return a safe, generic message. |
+| Chatbot prompt injection | LLM01 Prompt Injection | Differentiated, ties to AI-aware QA; the one non-deterministic case, asserted on outcome | (A) The chatbot is coerced into issuing a coupon. (B) It refuses the injected request. |
 
 ---
 
@@ -141,9 +142,9 @@ The curated set (chosen for being representative of a Top 10 class, safe in a co
 | Tool | Role | Why |
 |------|------|-----|
 | Playwright + TypeScript | UI and API automation | Fast, reliable auto-waiting, built-in tracing and parallelism, strong current demand. |
-| Postman / Newman | API collection in CI | Recognizable, keyword-scanned by recruiters, easy to share and run headless. |
+| Postman / Newman | Optional API collection (planned) | Recognizable and recruiter-friendly. The API layer currently runs on Playwright's request API, so this is a candidate add-on, not yet wired into CI. |
 | Zod | Response schema validation | Enforces API contracts; catches silent drift the status code alone misses. |
-| SQL client (pg or sqlite driver) | Database assertions | Enables the three-way consistency check. |
+| node:sqlite (built-in), better-sqlite3 as fallback | Database assertions | Reads a copied SQLite file to enable the three-way consistency check. |
 | OWASP ZAP | DAST baseline | Industry-standard automated scanner; demonstrates security tooling in a pipeline. |
 | Docker Compose | Run the app under test | Reproducible, disposable, and the safe environment for security work. |
 | GitHub Actions | CI | Runs the suite on every change and publishes results. |
@@ -153,9 +154,9 @@ The curated set (chosen for being representative of a Top 10 class, safe in a co
 
 ## 9. CI and reporting
 
-On every push and pull request the pipeline runs lint, then the functional suite in parallel against a fresh container, then the security checks, then the ZAP baseline scan. Artifacts published: the Playwright HTML report (to GitHub Pages, with traces and screenshots on failure) and the ZAP report.
+On every push and pull request, four jobs run in parallel, each on its own fresh container: lint, the functional suite, the security regression, and the ZAP baseline scan. Within the functional and security jobs, tests run serially (workers set to 1) to respect the single-user design. A final job merges the Playwright blob reports into one HTML report and publishes it to GitHub Pages, with traces and screenshots on failure; the ZAP report is attached to the run.
 
-**Build gating.** Functional failures and any new high-severity ZAP alert fail the build. Vulnerability-confirmation tests are informational by nature (they pass *because* the app is vulnerable), so they report but do not gate.
+**Build gating.** Only functional failures fail the build. The security regression and the ZAP baseline are informational and never gate: the confirmation tests pass *because* the app is vulnerable, and ZAP runs against a deliberately vulnerable target, so both report rather than block.
 
 **Flaky test policy.** A test that fails intermittently is quarantined and tracked, not retried into a false green. Knowing a real failure from a flaky one is a core skill, so I treat flakiness as a defect in the test, not noise to suppress.
 

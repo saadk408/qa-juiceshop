@@ -251,8 +251,8 @@ test.fail('error responses do not leak query or schema detail', async ({ request
 | | |
 |---|---|
 | **OWASP** | LLM01 Prompt Injection (OWASP Top 10 for LLM Apps) |
-| **Risk-matrix area** | Chatbot and LLM features (P2) |
 | **Juice Shop challenge** | Greedy Chatbot / coupon manipulation |
+| **Risk-matrix area** | Chatbot and LLM features (P2) |
 | **Layer** | UI |
 
 **The vulnerability.** The support chatbot can issue discount coupons through a tool whose use is gated only by instructions in its system prompt. Crafted messages can talk the model past those instructions and trigger the coupon tool when the real conditions are not met.
@@ -263,7 +263,7 @@ test.fail('error responses do not leak query or schema detail', async ({ request
 
 ```ts
 // tests/security/chatbot-prompt-injection.spec.ts
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loginAsUser, loginViaUi } from '../../src/fixtures/auth';
 
 // NOTE: selectors, the chatbot response endpoint, and the coupon format below are
@@ -278,7 +278,7 @@ const INJECTION_TURNS = [
 ];
 
 // Send one message and wait for the chatbot's reply instead of a fixed sleep.
-async function sendAndAwaitReply(page, input, turn) {
+async function sendAndAwaitReply(page: Page, input: Locator, turn: string) {
   await input.fill(turn);
   const replied = page.waitForResponse(
     (r) => /chatbot/i.test(r.url()) && r.request().method() === 'POST',
@@ -324,7 +324,7 @@ test.fail('chatbot refuses ineligible coupon requests under injection', async ({
 
 ```bash
 npx playwright test tests/security          # all five cases
-npx playwright test tests/security --grep idor   # one case
+npx playwright test tests/security --grep -i idor   # one case
 ```
 
 In CI the confirmation tests report their results but do not fail the build, since they pass *because* the app is vulnerable. The target-state specs are tracked as known expected-failures and will flip to passing only when the corresponding fix lands. The ZAP baseline scan runs alongside these as a broader safety net.

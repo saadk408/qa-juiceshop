@@ -42,7 +42,7 @@ flowchart TD
     end
 
     subgraph CI["GitHub Actions"]
-        RUN["Run suites in parallel"]
+        RUN["Run jobs in parallel (own container each)"]
         ZAP["OWASP ZAP baseline scan"]
         REPORT["Publish HTML report to GitHub Pages"]
     end
@@ -51,6 +51,7 @@ flowchart TD
     T_API --> API
     T_DB --> DB
     T_SEC --> UI
+    T_SEC --> API
     TESTS --> RUN --> ZAP --> REPORT
 ```
 
@@ -59,7 +60,7 @@ flowchart TD
 | Area | Tools |
 |------|-------|
 | UI and API automation | Playwright, TypeScript |
-| API collection | Postman, Newman |
+| API collection (planned) | Postman, Newman |
 | Contract validation | Zod schemas |
 | Database assertions | SQL via Node client |
 | Security scanning | OWASP ZAP (baseline) |
@@ -73,7 +74,7 @@ flowchart TD
 | UI end-to-end | Register and login, browse and search, basket, checkout, reviews |
 | API | The same operations at the service level, with status, auth, and contract checks |
 | Database | Persistence and the three-way UI/API/DB consistency check |
-| Security regression | Curated OWASP Top 10 cases (SQL injection, broken access control, XSS, data exposure, broken auth) |
+| Security regression | Curated cases: SQL injection, broken access control (basket IDOR), DOM XSS, sensitive data exposure, and LLM prompt injection (chatbot) |
 | DAST | OWASP ZAP baseline scan in CI |
 
 Full rationale, the risk matrix, and the curated vulnerability list are in **[docs/test-strategy.md](docs/test-strategy.md)**.
@@ -100,7 +101,7 @@ git clone https://github.com/[your-username]/[repo].git
 cd [repo]
 
 # 2. Start the application under test (http://localhost:3000)
-docker compose up -d
+docker compose up -d --wait
 
 # 3. Install test dependencies and browsers
 npm ci
@@ -121,6 +122,7 @@ Run a single layer:
 ```bash
 npx playwright test tests/api      # API only
 npx playwright test tests/ui       # UI only
+npx playwright test tests/db       # database only
 npx playwright test tests/security # security regression only
 ```
 
@@ -134,7 +136,6 @@ This suite runs only against your own local or CI instance of Juice Shop, which 
 .
 ├── docs/
 │   ├── test-strategy.md         # the thinking: scope, risk matrix, decisions
-│   ├── risk-matrix.md           # standalone risk scoring
 │   ├── security-regression.md   # the curated vulnerability cases
 │   ├── ai-validation-log.md     # where AI got it wrong, and the fixes
 │   └── bugs/                    # written bug reports
@@ -148,8 +149,9 @@ This suite runs only against your own local or CI instance of Juice Shop, which 
 │   ├── api/
 │   ├── db/
 │   └── security/
-├── postman/                     # Newman collection
+├── postman/                     # Newman collection (planned)
 ├── .github/workflows/ci.yml     # functional suite + ZAP scan + report publish
+├── playwright.config.ts
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -160,7 +162,7 @@ This suite runs only against your own local or CI instance of Juice Shop, which 
 A few choices worth surfacing, with full reasoning in the [strategy doc](docs/test-strategy.md):
 
 - The app reseeds itself on every restart, so each CI run uses a fresh container for deterministic, known-good data.
-- The app is single-user per instance, so parallelism is bounded and global-state tests are isolated.
+- The app is single-user per instance, so tests run serially against one instance (workers = 1); parallelism comes from separate CI jobs and containers, not more workers.
 - Security tests are written in two paired styles: one that confirms the vulnerability exists, and one that asserts the secure target state and flips to passing once the issue is fixed.
 
 ## About

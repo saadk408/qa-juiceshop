@@ -61,7 +61,7 @@ jobs:
 
       # docker-compose.yml must expose Juice Shop on port 3000.
       - name: Start Juice Shop
-        run: docker compose up -d
+        run: docker compose up -d --wait
 
       - uses: actions/setup-node@v4
         with:
@@ -73,16 +73,6 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
-
-      - name: Wait for the app to be ready
-        run: |
-          for i in $(seq 1 60); do
-            curl -sf "$BASE_URL" >/dev/null && echo "Juice Shop is up" && exit 0
-            sleep 2
-          done
-          echo "Juice Shop did not become ready in time" >&2
-          docker compose logs >&2 || true
-          exit 1
 
       - name: Run functional suite
         run: npx playwright test tests/ui tests/api tests/db --reporter=blob
@@ -109,7 +99,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Start Juice Shop
-        run: docker compose up -d
+        run: docker compose up -d --wait
 
       - uses: actions/setup-node@v4
         with:
@@ -121,15 +111,6 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
-
-      - name: Wait for the app to be ready
-        run: |
-          for i in $(seq 1 60); do
-            curl -sf "$BASE_URL" >/dev/null && exit 0
-            sleep 2
-          done
-          echo "Juice Shop did not become ready in time" >&2
-          exit 1
 
       - name: Run security regression suite
         run: npx playwright test tests/security --reporter=blob
@@ -151,16 +132,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Start Juice Shop
-        run: docker compose up -d
-
-      - name: Wait for the app to be ready
-        run: |
-          for i in $(seq 1 60); do
-            curl -sf "$BASE_URL" >/dev/null && exit 0
-            sleep 2
-          done
-          echo "Juice Shop did not become ready in time" >&2
-          exit 1
+        run: docker compose up -d --wait
 
       # The action attaches its HTML/Markdown report to the run as an artifact
       # named "zap_scan" automatically.
